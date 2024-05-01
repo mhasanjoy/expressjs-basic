@@ -1,14 +1,16 @@
 const express = require("express");
 const mongoose = require("mongoose");
 const todoSchema = require("../schema/todoSchema");
+const userSchema = require("../schema/userSchema");
 const checkLogin = require("../middlewares/checkLogin");
 
 const router = express.Router();
 const Todo = mongoose.model("Todo", todoSchema);
+const User = mongoose.model("User", userSchema);
 
 router.get("/", checkLogin, async (req, res) => {
   try {
-    const result = await Todo.find();
+    const result = await Todo.find().populate("user", "name username -_id").select({ date: 0, __v: 0 });
     res.status(200).json({
       data: result,
       message: "Todo's were retrieved successfully!",
@@ -77,11 +79,19 @@ router.get("/:id", async (req, res) => {
   }
 });
 
-router.post("/", async (req, res) => {
-  const newTodo = new Todo(req.body);
-
+router.post("/", checkLogin, async (req, res) => {
+  const newTodo = new Todo({ ...req.body, user: req.userId });
   try {
-    await newTodo.save();
+    const todo = await newTodo.save();
+    await User.updateOne(
+      { _id: req.userId },
+      {
+        $push: {
+          todo: todo._id,
+        },
+      }
+    );
+
     res.status(200).json({
       message: "Todo was inserted successfully!",
     });
